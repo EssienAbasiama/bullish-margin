@@ -3,39 +3,55 @@
 namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
+use App\User;
+
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Validator;
 use Illuminate\Foundation\Auth\VerifiesEmails;
+
+
+// use Illuminate\Support\Facades\Mail;
+// use App\Mail\VerificationCodeMail;
+
+// use App\Http\Controllers\Controller;
+// use Illuminate\Support\Facades\Hash;
+
+// use Illuminate\Foundation\Auth\RegistersUsers;
 
 class VerificationController extends Controller
 {
-    /*
-    |--------------------------------------------------------------------------
-    | Email Verification Controller
-    |--------------------------------------------------------------------------
-    |
-    | This controller is responsible for handling email verification for any
-    | user that recently registered with the application. Emails may also
-    | be re-sent if the user didn't receive the original email message.
-    |
-    */
 
-    use VerifiesEmails;
-
-    /**
-     * Where to redirect users after verification.
-     *
-     * @var string
-     */
-    protected $redirectTo = '/home';
-
-    /**
-     * Create a new controller instance.
-     *
-     * @return void
-     */
-    public function __construct()
+    public function verifyEmail(Request $request)
     {
-        $this->middleware('auth');
-        $this->middleware('signed')->only('verify');
-        $this->middleware('throttle:6,1')->only('verify', 'resend');
+        // Validate the request
+        $validator = Validator::make($request->all(), [
+            'email' => 'required|email',
+            'verification_code' => 'required|digits:6',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json(['errors' => $validator->errors()], 422);
+        }
+
+        // Find the user by email
+        $user = User::where('email', $request->email)->first();
+
+        if (!$user) {
+            return response()->json(['message' => 'User not found'], 404);
+        }
+
+        // Check if verification code matches
+        if ($user->verification_code === $request->verification_code) {
+            // Update the user's verified status to true
+            $user->update([
+                'verified' => true,
+                'email_verified_at' => now(), // Set the verification time
+                'verification_code' => null, // Clear the verification code after successful verification
+            ]);
+
+            return response()->json(['message' => 'Email verified successfully'], 200);
+        } else {
+            return response()->json(['message' => 'Invalid verification code'], 422);
+        }
     }
 }

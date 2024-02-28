@@ -2,10 +2,12 @@
 
 namespace App\Http\Controllers\Auth;
 
+use Illuminate\Support\Facades\Mail;
+use App\Mail\VerificationCodeMail;
 use App\User;
 use App\Http\Controllers\Controller;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
-use App\Providers\RouteServiceProvider;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Foundation\Auth\RegistersUsers;
 
@@ -25,27 +27,9 @@ class RegisterController extends Controller
     use RegistersUsers;
 
     /**
-     * Where to redirect users after registration.
-     *
-     * @var string
-     */
-    protected $redirectTo = RouteServiceProvider::HOME;
-
-    /**
      * Create a new controller instance.
      *
      * @return void
-     */
-    public function __construct()
-    {
-        $this->middleware('guest');
-    }
-
-    /**
-     * Get a validator for an incoming registration request.
-     *
-     * @param  array  $data
-     * @return \Illuminate\Contracts\Validation\Validator
      */
     protected function validator(array $data)
     {
@@ -71,17 +55,33 @@ class RegisterController extends Controller
             // 'password' => Hash::make($data['password']),
         ]);
     }
-    
+
     public function register(Request $request)
     {
+        $verificationCode = $this->generateVerificationCode();
         $validator = $this->validator($request->all());
 
         if ($validator->fails()) {
             return response()->json(['errors' => $validator->errors()], 422);
         }
+        $user = $this->create([
+            'firstname' => $request['firstname'],
+            'lastname' => $request['lastname'],
+            'email' => $request['email'],
+            'password' => bcrypt($request['password']),
+        ]);
 
-        $user = $this->create($request->all());
+        // Update the user record with the verification code
+        $user->update(['verified' => false]);
+        $user->update(['verification_code' => $verificationCode]);
 
-        return response()->json(['user' => $user, 'message' => 'User registered successfully'], 201);
-    }
+            // Send email with verification code
+            Mail::to($user->email)->send(new VerificationCodeMail($verificationCode));
+
+            return response()->json(['user' => $user, 'message' => 'User registered successfully. Verification Code Sent'], 201);
+        }
+        public function generateVerificationCode()
+        {
+            return str_pad(mt_rand(0, 999999), 6, '0', STR_PAD_LEFT);
+        }
 }
